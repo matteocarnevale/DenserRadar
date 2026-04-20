@@ -3,6 +3,13 @@ device: cuda
 num_workers: 4
 pin_memory: true
 
+# Dataset selection
+# - manifest: expects a manifest.json + precomputed GT (original pipeline)
+# - vod: expects VoD folder layout (lidar/*.bin, radar/*.bin, split/*.txt) and generates GT on-the-fly
+data:
+  dataset: manifest   # manifest | vod
+  coordinates: spherical  # spherical | cartesian (affects metrics + point conversion)
+
 radar:
   doppler_bins: 64
   range_bins: 256
@@ -75,3 +82,19 @@ postprocess:
 evaluation:
   rpcd_radius_m: 0.3
   rpca_radius_m: 0.5
+
+# VoD / MSDNet-style bin layout (used when data.dataset == "vod")
+vod:
+  root: data/vod
+  split: train                 # which split txt to read by default
+  verify_files: true
+  vod_sequence_filter: null    # null | "4drvo_net"
+  radar_fov_deg: 120.0
+  ground_height: -1.5
+  elevation_grid_size_m: 0.5
+  elevation_height_threshold_m: 0.3
+
+  # Cartesian volume definition (meters)
+  point_cloud_range: [0.0, -16.0, -2.0, 32.0, 16.0, 4.0]
+  voxel_size: [0.1, 0.1, 0.15]           # used to define ds1 grid resolution
+  radar_input_feature: max_intensity     # occupancy | max_intensity | count

@@ -19,7 +19,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from denserradar.losses.occupancy import hybrid_multiscale_loss
-from denserradar.metrics.pointcloud import occupancy_to_points_xyz, rpcd_rpca
+from denserradar.metrics.pointcloud import occupancy_to_points_xyz, occupancy_to_points_xyz_cartesian, rpcd_rpca
 from denserradar.models.denser_radar import DenserRadarNet
 from denserradar.utils.io import ensure_dir, load_checkpoint, save_checkpoint
 
@@ -33,7 +33,7 @@ class EpochResult:
 
 class Trainer:
 
-    def __init__(self, model: DenserRadarNet, cfg: dict, run_dir: str | Path, device: str = "cuda"):
+    def __init__(self, model: torch.nn.Module, cfg: dict, run_dir: str | Path, device: str = "cuda"):
         self.model = model.to(device)
         self.cfg = cfg
         self.device = device
@@ -44,6 +44,8 @@ class Trainer:
         self.loss_cfg = cfg["loss"]
         self.post_cfg = cfg["postprocess"]
         self.eval_cfg = cfg["evaluation"]
+        self.data_cfg = cfg.get("data", {})
+        self.vod_cfg = cfg.get("vod", {})
 
         # Optimizer and schedule
         self.optimizer = torch.optim.AdamW(
@@ -70,6 +72,10 @@ class Trainer:
         consistency_weight = float(self.training_cfg.get("synthetic_consistency_weight", 0.0))
 
         if not checkpoint_path or consistency_weight <= 0:
+            return None
+
+        # Teacher consistency is only defined for the raw-tensor (manifest) pipeline.
+        if str(self.data_cfg.get("dataset", "manifest")) != "manifest":
             return None
 
         teacher = DenserRadarNet(self.cfg["radar"], self.cfg["model"]).to(self.device)
@@ -117,13 +123,24 @@ class Trainer:
 
     def _evaluate_batch_metrics(self, predictions: Dict[str, torch.Tensor], batch: Dict[str, object]) -> tuple[float, float]:
         """Convert the first sample's HR prediction to points, compute RP-CD / RP-CA."""
-        pred_points = occupancy_to_points_xyz(
-            predictions["pred_hr"][0],
-            self.radar_cfg,
-            threshold=float(self.post_cfg.get("pred_threshold", 0.5)),
-            high_res_factor=int(self.cfg["ground_truth"].get("high_res_factor", 2)),
-            max_points=self.post_cfg.get("max_points", None),
-        )
+        coords = str(self.data_cfg.get("coordinates", "spherical"))
+        threshold = float(self.post_cfg.get("pred_threshold", 0.5))
+        max_points = self.post_cfg.get("max_points", None)
+        if coords == "cartesian":
+            pred_points = occupancy_to_points_xyz_cartesian(
+                predictions["pred_hr"][0],
+                point_cloud_range=list(self.vod_cfg.get("point_cloud_range", [0.0, -16.0, -2.0, 32.0, 16.0, 4.0])),
+                threshold=threshold,
+                max_points=max_points,
+            )
+        else:
+            pred_points = occupancy_to_points_xyz(
+                predictions["pred_hr"][0],
+                self.radar_cfg,
+                threshold=threshold,
+                high_res_factor=int(self.cfg["ground_truth"].get("high_res_factor", 2)),
+                max_points=max_points,
+            )
         gt_points = batch["gt_points_radar"][0].detach().cpu().numpy()
 
         return rpcd_rpca(
@@ -157,7 +174,12 @@ class Trainer:
             # ── Forward pass ──
             with torch.set_grad_enabled(train):
                 with torch.amp.autocast(self.device, enabled=self.use_amp):
-                    predictions = self.model(batch["radar_tensor"])
+                    if "radar_tensor" in batch:
+                        predictions = self.model(batch["radar_tensor"])
+                    elif "radar_volume" in batch:
+                        predictions = self.model(batch["radar_volume"])
+                    else:
+                        raise KeyError("Batch must contain 'radar_tensor' (manifest) or 'radar_volume' (vod)")
                     main_loss, _ = hybrid_multiscale_loss(predictions, targets, self.loss_cfg)
                     teacher_loss = self._compute_teacher_loss(batch, targets)
                     total_loss = main_loss + teacher_weight * teacher_loss

@@ -76,6 +76,41 @@ def occupancy_to_points_xyz(
     return spherical_to_cartesian(points_spherical)
 
 
+def occupancy_to_points_xyz_cartesian(
+    occupancy: torch.Tensor,
+    point_cloud_range: list[float],
+    threshold: float = 0.5,
+    max_points: Optional[int] = None,
+) -> np.ndarray:
+    """Convert a cartesian occupancy grid (Z,Y,X) to Cartesian (x,y,z) points (voxel centers)."""
+    occ_np = occupancy.detach().cpu().numpy()
+    while occ_np.ndim > 3:
+        occ_np = occ_np[0]
+
+    active = np.argwhere(occ_np >= threshold)
+    if active.shape[0] == 0:
+        return np.zeros((0, 3), dtype=np.float32)
+
+    if max_points is not None and active.shape[0] > max_points:
+        scores = occ_np[active[:, 0], active[:, 1], active[:, 2]]
+        top = np.argsort(scores)[-max_points:]
+        active = active[top]
+
+    nz, ny, nx = occ_np.shape
+    pc_min = np.asarray(point_cloud_range[:3], dtype=np.float32)
+    pc_max = np.asarray(point_cloud_range[3:], dtype=np.float32)
+    ext = pc_max - pc_min
+    vx = float(ext[0] / nx)
+    vy = float(ext[1] / ny)
+    vz = float(ext[2] / nz)
+
+    # active is (z,y,x)
+    x = pc_min[0] + (active[:, 2].astype(np.float32) + 0.5) * vx
+    y = pc_min[1] + (active[:, 1].astype(np.float32) + 0.5) * vy
+    z = pc_min[2] + (active[:, 0].astype(np.float32) + 0.5) * vz
+    return np.stack([x, y, z], axis=1).astype(np.float32)
+
+
 def rpcd_rpca(
     pred_points: np.ndarray,
     gt_points: np.ndarray,
