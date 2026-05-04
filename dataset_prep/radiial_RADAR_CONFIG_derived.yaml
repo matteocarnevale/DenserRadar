@@ -1,0 +1,73 @@
+# Parametri derivati da RADAR_CONFIG.m (TI / RADIal-style)
+# Formule come nel file MATLAB fornito. Valori numerici arrotondati (double).
+#
+# Uso: allinea range_max_m, risoluzioni e dimensioni FFT con tensori (512, 256, 16).
+
+source:
+  description: "MATLAB/TI config snippet (numADCSample=512, numLoops=16, numChirpsPerLoop=16, ...)"
+
+constants:
+  speed_of_light_m_s: 299792458
+
+hardware:
+  num_adc_sample: 512
+  adc_sample_rate_hz: 10000000.0
+  num_chirps_per_loop: 16
+  num_loops: 16
+  num_tx_ant: 12
+  num_rx_ant: 16
+  num_chirps_per_frame: 256
+  start_freq_hz: 76000000000.0
+  chirp_slope_hz_per_s: 14677048000000.0
+  chirp_idle_time_s: 0.000006
+  adc_start_time_s: 0.000004
+  chirp_ramp_end_time_s: 0.0001084
+
+derived_time_and_bandwidth:
+  chirp_ramp_time_s: 5.12e-5
+  chirp_interval_s: 0.0001144
+  # B = chirpSlope * chirpRampTime
+  chirp_bandwidth_hz: 751464857.6
+  # fc = startFreq + (adcStart + chirpRamp/2) * slope
+  carrier_frequency_hz: 76434440620.8
+  wavelength_m: 0.0039222169425861915
+
+derived_range:
+  # delta_r = c / (2*B)
+  range_resolution_m: 0.1994720411527066
+  # maxRange = c*Fs*chirpRamp/(2*B)
+  max_range_unambiguous_m: 102.12968507018577
+  range_fft_size_nextpow2: 512
+  range_bins_native: 512
+  # allineato a rangeResolution se Ns = rangeFFTSize; RADIal può usare 512 campioni effettivi
+  range_bin_size_m: 0.1994720411527066
+
+derived_doppler:
+  doppler_fft_size: 256
+  # velocityResolution = lambda / (2 * Nc * Tc)
+  velocity_resolution_m_s: 0.06696311159080992
+  velocity_bin_size_m_s: 0.06696311159080992
+  # maximumVelocity = lambda / (2 * chirpInterval)
+  maximum_velocity_m_s: 17.14255656724734
+
+tensor_shapes:
+  fft_r_d_ant_complex64: [512, 256, 16]
+  meaning:
+    axis0: range_bins
+    axis1: doppler_bins
+    axis2: rx_antennas_physical
+
+denserradar_alignment_notes:
+  manifest_radar_npy_layout_D_R_E_A: "Per tensore [D,R,E,A] dopo beamforming, permuta da [R,D,E,A] con transpose."
+  radial_grid_yaml_suggestion:
+    range_bins: 512
+    doppler_bins: 256
+    elevation_bins: 11
+    azimuth_bins: 736
+    range_min_m: 0.0
+    range_max_m: 50.0
+    azimuth_min_deg: -75.0
+    azimuth_max_deg: 75.0
+    elevation_min_deg: -4.0
+    elevation_max_deg: 6.0
+  note: "maxRange TI ~102 m; il paper RADIal usa spesso crop a 50 m. Coerenza griglia angolare solo dopo beamforming (non dal solo FFT 512x256x16)."

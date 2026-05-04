@@ -6,7 +6,6 @@
 #   - calibration        → sostituisci identity con la tua calibrazione reale LiDAR→radar
 
 output:
-  # Non usare data/ se è in .gitignore: qui default sotto exports/ (versionabile se piccolo)
   root: exports/radial_denserradar
   sequence_id: radial_00
   manifest_filename: manifest.json
@@ -22,32 +21,25 @@ split:
   shuffle_seed: 42
 
 frames:
-  # Se null, elenca automaticamente i frame da radar_glob sotto source_root
   list_file: null
-  # Pattern glob relativo a source_root per trovare i file radar (per inferire gli id)
-  discover_glob: "radar_FFT/fft_*.npy"
-  # Regex per estrarre l'id intero dal nome file (primo gruppo catturato)
-  frame_id_regex: 'fft_(\d+)\.npy$'
-  # Ordina gli id numericamente
+  # radar_RAED/ è la cartella prodotta da build_radial_raed_dataset.py
+  discover_glob: "radar_RAED/raed_*.npy"
+  frame_id_regex: 'raed_(\d+)\.npy$'
   sort_numeric: true
 
 paths:
-  source_root: /path/to/RADIal_or_processed
-  # Path relativi a source_root; {frame_id} viene formattato con larghezza da id_padding
-  radar_template: "radar_FFT/fft_{frame_id:06d}.npy"
+  source_root: /path/to/RADIal
+  # I tensori RAED (R,D,E,A) vengono letti e permutati a (D,R,E,A) nello script
+  radar_template: "radar_RAED/raed_{frame_id:06d}.npy"
   lidar_template: "laser_PCL/laser_PCL_{frame_id:06d}.npy"
   id_padding: 6
 
 radar:
-  # Shape finale salvata su disco e letta da DenserRadar: float32 [D, R, E, A]
-  target_shape: [6, 480, 11, 736]
-  # Come interpretare il file sorgente:
-  #   DRAE  → già (D, R, E, A)
-  #   RAEC  → (R, A, E, C) con C = D (es. cubo Radar-Mamba)
-  #   RAED  → (R, A, E, D) come RAEC
-  source_layout: RAEC
-  resize_mode: zoom
-  # zoom | none | fail — se none/fail e le shape non coincidono, lo script termina con errore
+  # Shape finale [D, R, E, A] salvata per DenserRadar — da CalibrationTable RADIal
+  target_shape: [256, 512, 11, 736]
+  # raed_*.npy è (R, D, E, A) → permuta a (D, R, E, A) = DRAE
+  source_layout: RDEA     # nuovo layout: lo script fa transpose(x,(1,0,2,3))
+  resize_mode: none       # nessun resize: la shape è già quella corretta
 
 lidar:
   columns_xyz: [0, 1, 2]
@@ -56,7 +48,6 @@ lidar:
 calibration:
   lidar_to_radar: identity
   ego_pose: identity
-  # Opzionale: path a file .npy shape (4,4) float32 al posto di identity
   lidar_to_radar_npy: null
   ego_pose_npy: null
 

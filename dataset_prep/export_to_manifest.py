@@ -65,13 +65,27 @@ def _load_frame_list(path: Path) -> List[int]:
 
 
 def _layout_to_drae(arr: np.ndarray, layout: str) -> np.ndarray:
-    """Return array shaped (D, R, E, A)."""
+    """Return array shaped (D, R, E, A).
+
+    Layouts supportati:
+      DRAE  — già (D, R, E, A), nessuna permuta.
+      RDEA  — (R, D, E, A) da build_radial_raed_dataset.py → transpose (1,0,2,3).
+      RAEC  — (R, A, E, C) stile Radar-Mamba         → transpose (3,0,2,1).
+      RAED  — (R, A, E, D) alias di RAEC             → transpose (3,0,2,1).
+      RAE   — (R, A, E) 3D                           → newaxis → (1,R,A,E).
+    """
     layout = layout.upper()
     if layout == "DRAE":
         if arr.ndim != 4:
-            raise ValueError(f"DRAE expects 4D array, got {arr.shape}")
+            raise ValueError(f"DRAE expects 4D, got {arr.shape}")
         return arr
+    if layout == "RDEA":
+        # (R, D, E, A) → (D, R, E, A)
+        if arr.ndim != 4:
+            raise ValueError(f"RDEA expects 4D (R,D,E,A), got {arr.shape}")
+        return np.transpose(arr, (1, 0, 2, 3))
     if layout in ("RAEC", "RAED"):
+        # (R, A, E, C) → (C, R, E, A)
         if arr.ndim != 4:
             raise ValueError(f"{layout} expects 4D (R,A,E,C), got {arr.shape}")
         return np.transpose(arr, (3, 0, 2, 1))
@@ -79,7 +93,7 @@ def _layout_to_drae(arr: np.ndarray, layout: str) -> np.ndarray:
         if arr.ndim != 3:
             raise ValueError(f"RAE expects 3D, got {arr.shape}")
         return arr[np.newaxis, ...]
-    raise ValueError(f"Unknown source_layout: {layout}")
+    raise ValueError(f"Unknown source_layout: {layout!r}. Valid: DRAE, RDEA, RAEC, RAED, RAE")
 
 
 def _resize_drae(arr: np.ndarray, target: Tuple[int, int, int, int], mode: str) -> np.ndarray:

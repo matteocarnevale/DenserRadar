@@ -1,7 +1,14 @@
-# DenserRadar — configurazione griglia compatibile con RADIal (paper / Radar-Mamba Sec. 4.1)
-# Usa questo file con --config per precompute_ground_truth.py e train.py quando i tensori
-# radar nel manifest hanno shape [D, R, E, A] con R,E,A = 480, 11, 736 e D canali (es. 6).
-# Non modifica il codice; solo i parametri radar / ground_truth.
+# DenserRadar — configurazione griglia per tensori RADIal RAED
+#
+# Tensore in ingresso al modello: [D, R, E, A] = [256, 512, 11, 736]
+# Ottenuto da raed_XXXXXX.npy (R,D,E,A) con np.transpose(x,(1,0,2,3))
+# Prodotto da:  RADAR/HLI/build_radial_raed_dataset.py --calib-table CalibrationTable.npy
+#
+# Griglia angolare: da AoA_mat['Azimuth_table'] e ['Elevation_table'] in CalibrationTable.npy
+#   elevation: [-4.0 .. 6.0] gradi  →  11 bin
+#   azimuth:   [-75.0 .. 75.0] gradi → 736 bin
+# Range:   [0, 50] m  (paper RADIal usa 50 m come crop, fisica max ~102 m)
+# Doppler: 256 bin  (DDMA numChirpsPerFrame = 16×16)
 
 seed: 42
 device: cuda
@@ -13,22 +20,22 @@ data:
   coordinates: spherical
 
 radar:
-  doppler_bins: 6
-  range_bins: 480
-  elevation_bins: 11
-  azimuth_bins: 736
-  range_min_m: 0.0
-  range_max_m: 50.0
+  doppler_bins:    256    # asse D del tensore [D,R,E,A]
+  range_bins:      512    # asse R — numADCSample = 512
+  elevation_bins:  11     # asse E — da CalibrationTable Elevation_table
+  azimuth_bins:    736    # asse A — da CalibrationTable Azimuth_table
+  range_min_m:     0.0
+  range_max_m:     50.0   # paper RADIal crop; fisica ~102 m con Δr≈0.2 m
   elevation_min_deg: -4.0
-  elevation_max_deg: 6.0
+  elevation_max_deg:  6.0
   azimuth_min_deg: -75.0
-  azimuth_max_deg: 75.0
-  intensity_reduce: max
+  azimuth_max_deg:   75.0
+  intensity_reduce: max           # collassa D per gating: max|intensità| su Doppler
   intensity_threshold_mode: percentile
   intensity_threshold_value: 85.0
 
 ground_truth:
-  mode: multi_frame_hard
+  mode: multi_frame_hard   # single_frame_hard | multi_frame_hard | multi_frame_soft
   temporal_window: 10
   remove_ground: true
   ground_ransac_iters: 100
