@@ -1,0 +1,4 @@
+# Un ID intero per riga (padding gestito dai template nel YAML)
+0
+1
+2

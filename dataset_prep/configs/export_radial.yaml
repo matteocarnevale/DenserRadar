@@ -1,0 +1,64 @@
+# Esporta dati RADIal (o simili) nel layout atteso da DenserRadar: manifest + cartelle seq/radar|lidar|boxes
+#
+# Adatta:
+#   - paths.source_root  → radice dataset grezzo (es. cartella con radar_FFT e laser_PCL)
+#   - radar.target_shape → [D, R, E, A] DEVE coincidere con configs/radial_grid.yaml (o il tuo YAML train)
+#   - calibration        → sostituisci identity con la tua calibrazione reale LiDAR→radar
+
+output:
+  # Non usare data/ se è in .gitignore: qui default sotto exports/ (versionabile se piccolo)
+  root: exports/radial_denserradar
+  sequence_id: radial_00
+  manifest_filename: manifest.json
+  subdirs:
+    radar: radar
+    lidar: lidar
+    boxes: boxes
+
+split:
+  train_ratio: 0.9
+  train_name: train
+  val_name: val
+  shuffle_seed: 42
+
+frames:
+  # Se null, elenca automaticamente i frame da radar_glob sotto source_root
+  list_file: null
+  # Pattern glob relativo a source_root per trovare i file radar (per inferire gli id)
+  discover_glob: "radar_FFT/fft_*.npy"
+  # Regex per estrarre l'id intero dal nome file (primo gruppo catturato)
+  frame_id_regex: 'fft_(\d+)\.npy$'
+  # Ordina gli id numericamente
+  sort_numeric: true
+
+paths:
+  source_root: /path/to/RADIal_or_processed
+  # Path relativi a source_root; {frame_id} viene formattato con larghezza da id_padding
+  radar_template: "radar_FFT/fft_{frame_id:06d}.npy"
+  lidar_template: "laser_PCL/laser_PCL_{frame_id:06d}.npy"
+  id_padding: 6
+
+radar:
+  # Shape finale salvata su disco e letta da DenserRadar: float32 [D, R, E, A]
+  target_shape: [6, 480, 11, 736]
+  # Come interpretare il file sorgente:
+  #   DRAE  → già (D, R, E, A)
+  #   RAEC  → (R, A, E, C) con C = D (es. cubo Radar-Mamba)
+  #   RAED  → (R, A, E, D) come RAEC
+  source_layout: RAEC
+  resize_mode: zoom
+  # zoom | none | fail — se none/fail e le shape non coincidono, lo script termina con errore
+
+lidar:
+  columns_xyz: [0, 1, 2]
+  skip_if_missing: false
+
+calibration:
+  lidar_to_radar: identity
+  ego_pose: identity
+  # Opzionale: path a file .npy shape (4,4) float32 al posto di identity
+  lidar_to_radar_npy: null
+  ego_pose_npy: null
+
+boxes:
+  empty_list: true

@@ -1,0 +1,99 @@
+# DenserRadar — configurazione griglia compatibile con RADIal (paper / Radar-Mamba Sec. 4.1)
+# Usa questo file con --config per precompute_ground_truth.py e train.py quando i tensori
+# radar nel manifest hanno shape [D, R, E, A] con R,E,A = 480, 11, 736 e D canali (es. 6).
+# Non modifica il codice; solo i parametri radar / ground_truth.
+
+seed: 42
+device: cuda
+num_workers: 4
+pin_memory: true
+
+data:
+  dataset: manifest
+  coordinates: spherical
+
+radar:
+  doppler_bins: 6
+  range_bins: 480
+  elevation_bins: 11
+  azimuth_bins: 736
+  range_min_m: 0.0
+  range_max_m: 50.0
+  elevation_min_deg: -4.0
+  elevation_max_deg: 6.0
+  azimuth_min_deg: -75.0
+  azimuth_max_deg: 75.0
+  intensity_reduce: max
+  intensity_threshold_mode: percentile
+  intensity_threshold_value: 85.0
+
+ground_truth:
+  mode: multi_frame_hard
+  temporal_window: 10
+  remove_ground: true
+  ground_ransac_iters: 100
+  ground_distance_threshold_m: 0.15
+  use_icp_refinement: false
+  icp_max_correspondence_distance_m: 0.5
+  outlier_radius_m: 0.4
+  outlier_min_neighbors: 3
+  high_res_factor: 2
+  soft_sigma_voxels: 0.8
+  crop_to_radar_fov: true
+  dynamic_box_scale: 1.0
+  box_z_padding_m: 0.2
+  save_dense_points: true
+
+model:
+  base_channels: 16
+  channel_multipliers: [1, 2, 4, 8]
+  num_levels: 4
+  use_cross_attention: true
+  norm_groups: 8
+  activation: silu
+  dropout_p: 0.0
+
+loss:
+  use_deep_supervision: true
+  lambda_focal: 700.0
+  focal_alpha: 0.25
+  focal_gamma: 2.0
+  smooth: 1.0
+
+training:
+  epochs: 30
+  batch_size: 1
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-2
+  grad_clip_norm: 1.0
+  amp: true
+  log_every_steps: 20
+  save_every_epochs: 1
+  synthetic_consistency_weight: 0.0
+  teacher_checkpoint: null
+  teacher_detach_gt: true
+  train_split: train
+  val_split: val
+  max_train_steps_per_epoch: null
+  max_val_steps: null
+
+postprocess:
+  pred_threshold: 0.5
+  max_points: null
+
+evaluation:
+  rpcd_radius_m: 0.3
+  rpca_radius_m: 0.5
+
+vod:
+  root: data/vod
+  split: train
+  verify_files: true
+  vod_sequence_filter: null
+  radar_fov_deg: 120.0
+  ground_height: -1.5
+  elevation_grid_size_m: 0.5
+  elevation_height_threshold_m: 0.3
+  point_cloud_range: [0.0, -16.0, -2.0, 32.0, 16.0, 4.0]
+  voxel_size: [0.1, 0.1, 0.15]
+  radar_input_feature: max_intensity
